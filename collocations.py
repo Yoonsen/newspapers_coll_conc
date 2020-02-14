@@ -1,7 +1,8 @@
 import dhlab.nbtext as nb
 import requests
 import pandas as pd
-
+from IPython.display import HTML
+# HMMM
 def frame(something, name = None):
     """Try to make a frame out of something and name columns according to name, which should be a string or a list of strings,
     one for each column. Mismatch in numbers is taken care of."""
@@ -19,6 +20,23 @@ def frame(something, name = None):
                 res.columns = name + list(range(len(name), number_of_columns))
         else:
             res.columns = [name] + list(range(1, number_of_columns))
+    return res
+
+
+def sample_coll(word, urns=[], after=5, before=5, limit=1000):
+    """Find collocations for word in a set of book URNs. Only books at the moment"""
+    from random import sample
+    
+    if isinstance(urns[0], list):  # urns assumed to be list of list with urn-serial as first element
+        urns = [u[0] for u in urns]
+    newurns = [x[0] for x in nb.refine_book_urn(words=[word], urns = urns)]
+    #print(newurns)
+    sampleurns = sample(newurns, min(len(newurns), 300)) 
+    r = requests.post("https://api.nb.no/ngram/urncoll", json={'word':word, 'urns':sampleurns, 
+                                                                   'after':after, 'before':before, 'limit':limit})
+    res = pd.DataFrame.from_dict(r.json(), orient='index')
+    if not res.empty:
+        res = res.sort_values(by=res.columns[0], ascending = False)
     return res
 
 def collocation(
@@ -168,3 +186,53 @@ def conc_newspaper(word,
             'title':title}
         )
     return data.json()
+
+
+def unigram(word, period=(1950, 2020), media = 'bok', ddk=None, topic=None, gender=None, publisher=None, lang=None, trans=None, name=None):
+    r = requests.get("https://api.nb.no/ngram/unigrams", params={
+        'word':word,
+        'ddk':ddk,
+        'topic':topic,
+        'gender':gender,
+        'publisher':publisher,
+        'lang':lang,
+        'trans':trans,
+        'period0':period[0],
+        'period1':period[1],
+        'media':media,
+        'name':name
+    })
+    return nb.frame(dict(r.json()))
+
+def conc_avis(word, 
+            title = '%', 
+            before = 5, 
+            after = 5, 
+            datefrom = "1800-01-01", 
+            dateto = "2000-01-01", 
+            size = 20):
+    HTML(nb.konk_to_html(
+        conc_newspaper(word, 
+            title = title, 
+            before = after, 
+            after = after, 
+            datefrom = datefrom, 
+            dateto = dateto, 
+            size = size)
+    ))
+
+def coll_avis(word, 
+            title = '%', 
+            before = 5, 
+            after = 5, 
+            datefrom = "1800-01-01", 
+            dateto = "2000-01-01", 
+            limit= 1000):
+    
+    return nb.frame(nb.frame(coll_newspaper(word, 
+            title = title, 
+            before = before, 
+            after = after, 
+            datefrom = datefrom, 
+            dateto = dateto, 
+            limit= limit)).loc[0].transpose())
